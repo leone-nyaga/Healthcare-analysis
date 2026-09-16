@@ -243,7 +243,7 @@ awk -F',' '{print $2}' healthcare_dataset.csv | grep '^$' | wc -l
 
 + ```grep '^$'```: keeps only empty lines.
 
-```^$``` is a regular expression that matches an empty line. ^ for the beginning and $ for the end of the line.
++ ```^$``` is a regular expression that matches an empty line. ^ for the beginning and $ for the end of the line.
 
 Literal meaning: The start of the line is immediately followed by the end of the line.
 
@@ -303,3 +303,4 @@ so, here's the complete table for the missing data:
 | Exercise_Frequency       |   **0** |     100 |
 
 
+## What should we do about the missing values??
