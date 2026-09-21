@@ -63,8 +63,12 @@ services:
   mysql:
 ```
 
-This is the top-level section where you define the containers/services your application needs. In this case we only have one service i.e. MySQL.
+This is the top-level section where you define the containers/services your application needs.
+
+In this case we only have one service i.e. MySQL.
+
 ```mysql``` is the service name.
+
 The service name can be any name you choose: banana, my_db, database etc.
 
 ### 2. image
@@ -80,7 +84,309 @@ This means:
 + 8.0: is the MySQL version.
 
 So essentially, we are instructing Docker to create a MySQl database container.
+
 We don't need to manually install MySQL on our machine.
 
+### 3. container_name
 
+```
+container_name: healthcare_mysql
+```
 
+Normally Docker generates a container name automatically. This explicitly names your container: ```healthcare_mysql```.
+
+### 4. restart: unless-stopped
+
+```
+restart: unless-stopped
+```
+
+This tells Docker to automatically restart the MySQL container if it stops unexpectedly. So, if mysql crashes and docker notices, docker will keep restarting it unless you explicitly stop it.
+
+### 5. environments
+
+```
+environments:
+```
+
+This section provides environment variables to the MySQL container.
+
+These variables are particularly important because the official MySQL Docker image uses them during its initial setup.
+
+In this case, we have four:
+
+```
+MYSQL_DATABASE: healthcare_analysis
+MYSQL_USER: healthcare_user
+MYSQL_PASSWORD: healthcare_password
+MYSQL_ROOT_PASSWORD: root_password
+```
+
+### 6. MYSQL DATABASE
+
+```
+MYSQL_DATABASE: healthcare_analysis
+```
+
+This tells MySQL to create a database called ```healthcare_analysis```.
+
+So after MySQL initializes, you'll have:
+
+```
+MySQL server
+└── healthcare_analysis
+```
+
+Your tables will eventually live inside this database.
+
+### 7. MYSQL USER
+
+```
+MYSQL_USER: healthcare_user
+```
+
+This creates a MySQL user: ```healthcare_user```. This is intended to be your application's normal database user.
+
+### 8. MYSQL PASSWORD
+
+```
+MYSQL_PASSWORD: healthcare_password
+```
+
+This sets the password for: ```healthcare_user```
+
+So you effectively have:
+
+```
+Username: healthcare_user
+Password: healthcare_password
+```
+
+Your application can use those credentials to connect to the database.
+
+### 9. MYSQL ROOT PASSWORD
+
+```
+MYSQL_ROOT_PASSWORD: root_password
+```
+
+MySQL has a special administrative user called: ```root```
+
+This sets the root user's password to: ```root_password```
+
+Conceptually:
+
+```
+MySQL
+│
+├── root
+│   └── root_password
+│
+└── healthcare_user
+    └── healthcare_password
+```
+
+Important: these passwords are fine for a local development project, but you shouldn't use simple/default-looking passwords like these in production.
+
+### 10. Ports
+
+```
+ports:
+  - "3307:3306"
+```
+
+This is one of the most important lines.
+
+It maps a port on your computer to a port inside the Docker container.
+
+The format is: ```HOST_PORT:CONTAINER_PORT```
+
+So: ```3307:3306```
+
+means:
+
+```
+Your computer              Docker container
+     │                           │
+     │  localhost:3307           │
+     └──────────────────────────> │ MySQL:3306
+```
+
+MySQL normally listens on: ```3306```
+
+inside the container.
+
+You've exposed it on: ```3307```
+
+on your machine.
+
+Therefore, from your Ubuntu/WSL terminal, you could connect using: ```localhost:3307```
+
+For example:
+
+```bash
+mysql -h 127.0.0.1 -P 3307 -u healthcare_user -p
+```
+
+Then enter: ```healthcare_password```
+
+***Why 3307 instead of 3306?***: Probably because you want to avoid a conflict with another MySQL instance already using port 3306 on your computer.
+
+Think of it as:
+
+```
+Host machine
+localhost:3307
+       ↓
+Docker
+container:3306
+       ↓
+MySQL
+```
+
+Inside Docker, MySQL still uses its normal port 3306.
+
+### 11. volumes
+
+```
+volumes:
+  - mysql_data:/var/lib/mysql
+```
+
+This is very important for your database.
+
+MySQL stores its actual database files inside: ```/var/lib/mysql```
+
+inside the container.
+
+You're attaching a Docker volume called: ```mysql_data``` to that directory.
+
+So:
+
+```
+Docker volume
+mysql_data
+     │
+     ↓
+/var/lib/mysql
+     │
+     ↓
+MySQL database files
+```
+
+*** Why do we need this? ***
+
+Imagine you don't have the volume.
+
+You start MySQL:
+
+```
+docker compose up
+```
+
+You create:
+
+```
+patients
+hospitals
+treatments
+```
+
+Then you delete the container.
+
+Without persistent storage, your database data could disappear along with the container.
+
+With:
+
+```
+mysql_data:/var/lib/mysql
+```
+
+the data is stored separately from the container.
+
+So you can recreate the container and retain the database.
+
+### 12. Top-level volumes
+
+At the bottom:
+
+```
+volumes:
+  mysql_data:
+```
+
+This declares the Docker volume.
+
+You're basically telling Docker:
+
+"Create/manage a persistent volume called mysql_data."
+
+The two pieces work together:
+
+```
+services:
+  mysql:
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
+```
+
+The first part uses the volume.
+
+The second part declares it.
+
+### What happens when you run it?
+
+When you execute:
+
+```
+docker compose up -d
+```
+
+Docker Compose roughly does this:
+
+```
+1. Read docker-compose.yml
+          ↓
+2. Find mysql service
+          ↓
+3. Download mysql:8.0 if necessary
+          ↓
+4. Create mysql_data volume
+          ↓
+5. Create healthcare_mysql container
+          ↓
+6. Configure MySQL environment variables
+          ↓
+7. Map localhost:3307 → container:3306
+          ↓
+8. Start MySQL
+```
+
+You can then check it with:
+
+```
+docker ps
+```
+
+and see your MySQL container running.
+
+To stop it:
+
+```
+docker compose down
+```
+
+The container is removed, but mysql_data normally remains, which is why your database data persists.
+
+If you instead run:
+
+```
+docker compose down -v
+```
+
+the ```-v``` removes the volumes too.
+
+That means your MySQL data will be deleted.
