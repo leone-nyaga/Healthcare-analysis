@@ -476,4 +476,158 @@ Output:
 +------------------+-----------------------+
 ```
 
+## How should we handle blank data
 
+There are several possibilities:
+
++ blank → 0
+
++ blank → "blank"
+
++ blank → "Unknown"
+
++ blank → NULL
+
+My decision was: CSV blank -> SQL NULL
+
+Why: NULL means the value is missing/not provided.
+
+## Let's copy the CSV data into the MySQL container
+
+So, MySQL reported that:
+
+```bash
+secure_file_priv = /var/lib/mysql-files/
+```
+
+This means MySQL's server-side file operations are restricted to that directory.
+
+The CSV was copied into the container using:
+
+```bash
+docker cp data/healthcare_dataset.csv \ healthcare_mysql:/var/lib/mysql-files/healthcare_dataset.csv
+```
+
+Verified with:
+
+```bash
+docker exec healthcare_mysql \ ls -l /var/lib/mysql-files/
+```
+
+Output showed:
+
+```
+healthcare-dataset.csv
+```
+
+The data flow becomes:
+
+```
+~/healthcare-analysis/data/healthcare_dataset.csv
+		|
+		| docker cp
+		\/
+	healthcare-dataset.csv
+		|
+		\/
+/var/lib/mysql-files/healthcare_dataset.csv
+```
+
+## Why do we use MySQL User Variables
+
+The CSV column order matches the MySQL table, but the CSV can contain blank fields.
+
+Example:
+
+```
+P003,78,Male,40,Hypertension,Low,No,7,Good,Smoker,
+```
+
+The last field is blank.
+
+We therefore temporarily load CSV values into user variables:
+
+```sql
+( 
+@patient_id,
+@age,
+@gender,
+@bmi,
+@blood_pressure,
+@cholesterol_level,
+@diabetes,
+@hospital_visits,
+@medication_adherence,
+@smoking_status,@exercise_frequency
+)
+```
+
+Then use ```NULLIF()```:
+
+```sql
+SET
+    bmi = NULLIF(@bmi, ''),
+    ...
+```
+
+syntax to NULLIF():
+```sql
+NULLIF(valuea, valueb)
+```
+
+Meaning that if valuea is equal to valueb, return NULL. Otherwise, return valuea.
+
+So, if:
+
+```sql
+NULLIF(@bmi, '')
+```
+
+means: If @bmi is an empty string (''), turn it into NULL. Otherwise, keep whatever is in @bmi.
+
+Example:
+
+```sql
+| `@bmi`   | `NULLIF(@bmi, '')` |
+| -------- | ------------------ |
+| `'25.4'` | `'25.4'`           |
+| `'18.7'` | `'18.7'`           |
+| `''`     | `NULL`             |
+| `'30'`   | `'30'`             |
+```
+
+## Import Errors!!
+
+The first LOAD DATA INFILE attempt produced:
+
+```bash
+ERROR 1045 (28000): Access denied for user 'healthcare_user'@'%'
+```
+Initially this looked like an authentication problem.
+
+I checked:
+
+```sql
+SELECT USER(), CURRENT_USER(), DATABASE();
+```
+
+and:
+
+```sql
+SHOW GRANTS FOR 'healthcare_user'@'%';
+```
+
+The user had:
+
+```sql
+GRANT USAGE ON *.*
+GRANT ALL PRIVILEGES ON healthcare_analysis.*
+```
+
+The important discovery was that the user did not have the global:
+
+```bash
+FILE
+```
+
+privilege.
