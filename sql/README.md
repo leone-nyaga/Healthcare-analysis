@@ -678,6 +678,7 @@ but that does not automatically give permission to read files from the MySQL ser
 
 Conceptually:
 
+```
 healthcare_user
 │
 ├── healthcare_analysis.*
@@ -685,6 +686,7 @@ healthcare_user
 │
 └── FILE
   └── missing (no)
+```
 
 ```LOAD DATA INFILE``` performs a server-side file read, so MySQL requires the FILE privilege.
 
@@ -838,3 +840,121 @@ SET
     smoking_status = NULLIF(@smoking_status, ''),
     exercise_frequency = NULLIF(@exercise_frequency, '');
 ```
+
+## Let's Verify whether it worked
+
+1. First test
+
+```sql
+SELECT COUNT(*) AS row_count
+FROM patients;
+```
+
+Result
+
+```
+100
+```
+
+So all 100 patient records are present.
+
+2. second test
+
+```sql
+SELECT *
+FROM patients
+LIMIT 5;
+```
+
+Results:
+
+```bash
+mysql> select * from patients limit 5;
++------------+------+--------+------+-----------------+-------------------+----------+--------------------------+----------------------+----------------+--------------------+
+| patient_id | age  | gender | bmi  | blood_pressure  | cholesterol_level | diabetes | hospital_visits_per_year | medication_adherence | smoking_status | exercise_frequency |
++------------+------+--------+------+-----------------+-------------------+----------+--------------------------+----------------------+----------------+--------------------+
+| P001       |   69 | Male   | 33.8 | Hypertension    | Normal            | No       |                        0 | Poor                 | Non-Smoker     |                  0 |
+| P002       |   32 | Female | 21.7 | Hypertension    | Normal            | No       |                        0 | Good                 | Smoker         |                  5 |
+| P003       |   78 | Male   |   40 | Hypertension    | Low               | No       |                        7 | Good                 | Smoker         |               NULL |
+| P004       |   38 | Male   | 24.2 | Normal          | High              | No       |                        1 | Good                 | Smoker         |                  6 |
+| P005       | NULL | Female | NULL | Prehypertension | High              | No       |                       11 | Good                 | Smoker         |                  0 |
++------------+------+--------+------+-----------------+-------------------+----------+--------------------------+----------------------+----------------+--------------------+
+5 rows in set (0.00 sec)
+```
+
+The output showed that missing values were stored as NULL.
+
+## Lessons Learned
+
+1. A successful database connection doesn't necessarily mean a database is selected
+
+```sql
+USE healthcare_analysis;
+```
+selects the database for the current session.
+
+2. Database privileges and server privileges are different
+
+A user can have:
+
++ ALL PRIVILEGES ON healthcare_analysis.*
+
+while still lacking:
+
+```
+FILE
+```
+
+3. secure_file_priv controls where server-side file operations can access files
+
+```
+SHOW VARIABLES LIKE 'secure_file_priv';
+```
+
+returned:
+
+```
+/var/lib/mysql-files/
+```
+
+4. User variables are useful when importing and transforming data
+
+```
+CSV
+ ↓
+@variable
+ ↓
+transformation
+ ↓
+table column
+```
+
+5. NULL is different from zero or a string such as "blank"
+
++ 0       → known zero
+
++ NULL    → value is missing
+
++ "blank" → actual text
+
+6. File formats matter
+
+The CSV came from a Windows environment and used:
+
+```
+\r\n
+```
+
+line endings.
+
+MySQL needed:
+
+```sql
+LINES TERMINATED BY '\r\n'
+```
+
+7. Don't blindly modify raw data to make an import work
+
+The original CSV was preserved.
+
+Instead, the import process was adjusted to correctly interpret the source data.
