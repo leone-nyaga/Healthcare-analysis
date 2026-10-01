@@ -594,6 +594,42 @@ Example:
 | `''`     | `NULL`             |
 | `'30'`   | `'30'`             |
 
+## The first import statement
+
+```sql
+LOAD DATA INFILE '/var/lib/mysql-files/healthcare_dataset.csv'
+INTO TABLE patients
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(
+    @patient_id,
+    @age,
+    @gender,
+    @bmi,
+    @blood_pressure,
+    @cholesterol_level,
+    @diabetes,
+    @hospital_visits,
+    @medication_adherence,
+    @smoking_status,
+    @exercise_frequency
+)
+SET
+    patient_id = NULLIF(@patient_id, ''),
+    age = NULLIF(@age, ''),
+    gender = NULLIF(@gender, ''),
+    bmi = NULLIF(@bmi, ''),
+    blood_pressure = NULLIF(@blood_pressure, ''),
+    cholesterol_level = NULLIF(@cholesterol_level, ''),
+    diabetes = NULLIF(@diabetes, ''),
+    hospital_visits_per_year = NULLIF(@hospital_visits, ''),
+    medication_adherence = NULLIF(@medication_adherence, ''),
+    smoking_status = NULLIF(@smoking_status, ''),
+    exercise_frequency = NULLIF(@exercise_frequency, '');
+```
+
 ## Import Errors!!
 
 The first LOAD DATA INFILE attempt produced:
@@ -629,3 +665,176 @@ FILE
 ```
 
 privilege.
+
+## Let's understand the Database Priviledges vs FILE
+
+The user had full privileges on:
+
+```sql
+healthcare_analysis.*
+```
+
+but that does not automatically give permission to read files from the MySQL server filesystem.
+
+Conceptually:
+
+healthcare_user
+│
+├── healthcare_analysis.*
+│ └── ALL PRIVILEGES (yes)
+│
+└── FILE
+  └── missing (no)
+
+```LOAD DATA INFILE``` performs a server-side file read, so MySQL requires the FILE privilege.
+
+## Granting FILE
+
+I initially tried:
+
+```sql
+GRANT FILE ON *.* TO 'healthcare_user'@'%';
+```
+
+while logged in as healthcare_user.
+
+This failed:
+
+```bash
+ERROR 1045 (28000):
+Access denied for user 'healthcare_user'@'%'
+```
+
+The reason:
+
++ A normal user cannot grant itself a privilege it does not have.
+
+I then logged in as root:
+
+```bash
+docker exec -it healthcare_mysql mysql -u root -p
+```
+
+and ran:
+
+```sql
+GRANT FILE ON *.* TO 'healthcare_user'@'%';
+```
+
+This succeeded:
+
+```bash
+Query OK, 0 rows affected
+```
+
+Verified with:
+
+```sql
+SHOW GRANTS FOR 'healthcare_user'@'%';
+```
+
+Now the grants included:
+
+```
+GRANT FILE ON *.*
+GRANT ALL PRIVILEGES ON healthcare_analysis.*
+```
+
+## Second Import Error — Windows Line Endings
+
+After fixing the privilege problem, the import actually reached the CSV.
+
+Then MySQL produced an error involving:
+
+```
+exercise_frequency
+
+at row 3.
+```
+
+Instead of guessing, I inspected the raw CSV:
+
+```bash
+sed -n '1,4p' data/healthcare_dataset.csv | cat -A
+```
+
+The output contained:
+
+```bash
+^M$
+```
+
+For example:
+
+```
+P003,78,Male,40,Hypertension,Low,No,7,Good,Smoker,^M$
+```
+
+The ```^M``` revealed that the CSV uses Windows-style line endings:
+
+```
+\r\n
+```
+
+rather than Unix/Linux:
+
+```
+\n
+```
+
+The problem was particularly visible because the last CSV field was blank.
+
+Instead of MySQL seeing: ```''``` it was effectively seeing the carriage-return character: ```'\r'```.
+
+Therefore: ```NULLIF(@exercise_frequency, '')``` did not convert it to NULL.
+
+## Fixing the line ending
+
+The original import used:
+
+LINES TERMINATED BY ```'\n'```
+
+The CSV actually uses Windows line endings, so it was changed to:
+
++ LINES TERMINATED BY ```'\r\n'```
+
+The CSV itself was not modified.
+
+This preserved the raw source data.
+
+## Final Successful Import
+
+The final LOAD DATA INFILE was:
+
+```sql
+LOAD DATA INFILE '/var/lib/mysql-files/healthcare_dataset.csv'
+INTO TABLE patients
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\r\n'
+IGNORE 1 LINES (
+    @patient_id,
+    @age,
+    @gender,
+    @bmi,
+    @blood_pressure,
+    @cholesterol_level,
+    @diabetes,
+    @hospital_visits,
+    @medication_adherence,
+    @smoking_status,
+    @exercise_frequency
+)
+SET
+    patient_id = NULLIF(@patient_id, ''),
+    age = NULLIF(@age, ''),
+    gender = NULLIF(@gender, ''),
+    bmi = NULLIF(@bmi, ''),
+    blood_pressure = NULLIF(@blood_pressure, ''),
+    cholesterol_level = NULLIF(@cholesterol_level, ''),
+    diabetes = NULLIF(@diabetes, ''),
+    hospital_visits_per_year = NULLIF(@hospital_visits, ''),
+    medication_adherence = NULLIF(@medication_adherence, ''),
+    smoking_status = NULLIF(@smoking_status, ''),
+    exercise_frequency = NULLIF(@exercise_frequency, '');
+```
