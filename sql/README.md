@@ -587,14 +587,12 @@ means: If @bmi is an empty string (''), turn it into NULL. Otherwise, keep whate
 
 Example:
 
-```sql
 | `@bmi`   | `NULLIF(@bmi, '')` |
 | -------- | ------------------ |
 | `'25.4'` | `'25.4'`           |
 | `'18.7'` | `'18.7'`           |
 | `''`     | `NULL`             |
 | `'30'`   | `'30'`             |
-```
 
 ## Import Errors!!
 
