@@ -108,3 +108,17 @@ leone-nyaga@DESKTOP-MFAESEK:~/healthcare-analysis$ ls -lh ~/healthcare-analysis/
 total 8.0K
 -rwxr-xr-x 1 leone-nyaga leone-nyaga 5.7K Sep  3 11:36 healthcare_dataset.csv
 ```
+
+## REMEMBER
+
+```bash
+docker exec -it healthcare_mysql mysql -u healthcare_user -p
+```
+
+To access the MySQL container.
+
+```bash
+docker exec -it healthcare_mysql mysql -u root -p
+```
+
+For root access.
