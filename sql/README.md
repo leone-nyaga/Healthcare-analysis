@@ -390,3 +390,90 @@ docker compose down -v
 the ```-v``` removes the volumes too.
 
 That means your MySQL data will be deleted.
+
+To sum it all up:
+
+```
+Run MySQL 8.0 in a container called healthcare_mysql, create a database called healthcare_analysis and a user called healthcare_user, expose MySQL to my computer on port 3307, and permanently store the database data in a Docker volume called mysql_data.
+```
+
+## Let's Enter MySQL
+
+run:
+
+```bash
+docker exec -it healthcare_mysql mysql -u healthcare_user -p
+```
+
+And enter the password: ```healthcare_password``` when requested.
+
+Then:
+
+```sql
+USE healthcare_analysis;
+```
+
+We have the schema in the ```schema.sql```  let's execute it
+
+```bash
+SOURCE /tmp/schema.sql;
+```
+
+After that, we should have:
+
+```bash
+mysql> SOURCE /tmp/schema.sql;
+Query OK, 0 rows affected (0.05 sec)
+
+mysql> describe patients;
++--------------------------+-------------+------+-----+---------+-------+
+| Field                    | Type        | Null | Key | Default | Extra |
++--------------------------+-------------+------+-----+---------+-------+
+| patient_id               | varchar(50) | NO   | PRI | NULL    |       |
+| age                      | int         | YES  |     | NULL    |       |
+| gender                   | varchar(50) | YES  |     | NULL    |       |
+| bmi                      | float       | YES  |     | NULL    |       |
+| blood_pressure           | varchar(50) | YES  |     | NULL    |       |
+| cholesterol_level        | varchar(50) | YES  |     | NULL    |       |
+| diabetes                 | varchar(50) | YES  |     | NULL    |       |
+| hospital_visits_per_year | int         | YES  |     | NULL    |       |
+| medication_adherence     | varchar(50) | YES  |     | NULL    |       |
+| smoking_status           | varchar(50) | YES  |     | NULL    |       |
+| exercise_frequency       | int         | YES  |     | NULL    |       |
++--------------------------+-------------+------+-----+---------+-------+
+11 rows in set (0.00 sec)
+```
+
+Let's check to see which directory MySQL allows for file imports/exports inside your Docker container.
+
+We'll use this command:
+
+```bash
+docker exec -it healthcare_mysql mysql -u healthcare_user -p -e "SHOW VARIABLES LIKE 'secure_file_priv';"
+```
+
+A quick breakdown of the command:
+
++ ```docker```: Tells the computer that you want to interact with docker.
+
++ ```exec```: Run a command inside an already-running Docker container.
+
++ ```-it```: lets you interact with the command normally. ```-i``` keeps the input open so you can type. ```-t```  give you an interactive terminal.
+
++ ```healthcare_mysql mysql -u healthcare_user```: Our SQL docker.
+
++ ```-e```: Execute the SQL statement that follows.
+
++ ```"SHOW VARIABLES LIKE 'secure_file_priv';"```: The SQL query. It asks sql to "Show me the MySQL configuration variable called secure_file_priv."
+
+Output:
+
+```
++------------------+-----------------------+
+| Variable_name    | Value                 |
++------------------+-----------------------+
+| secure_file_priv | /var/lib/mysql-files/ |
++------------------+-----------------------+
+```
+
+
